@@ -1,0 +1,132 @@
+---
+- name: Setup Web Server
+  hosts: ubuntu@ec2-3-93-39-239.compute-1.amazonaws.com
+  remote_user: ubuntu
+ 
+
+  tasks: 
+    - name: apt update
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+        force_apt_get: true
+      become: yes
+
+    - name: install apache2, curl, wget, git, unzip
+      script: /home/ubuntu/examproject/scripts/script1.sh
+      become: yes
+
+    - name: add php ppa-repo 
+      apt_repository:
+        repo="ppa:ondrej/php"
+      become: yes
+
+    - name: install php8
+      apt:
+        name: php8.1
+        state: present
+      become: yes
+
+    - name: install php extensions
+      apt:
+        name: ["php8.1-common", "php8.1-mysql", "php8.1-xml", "php8.1-xmlrpc", "php8.1-curl", "php8.1-gd", "php8.1-imagick", "php8.1-cli", "php8.1-dev", "php8.1-imap", "php8.1-mbstring", "php8.1-opcache", "php8.1-soap", "php8.1-zip", "php8.1-intl"]
+        state: present
+        update_cache: yes
+      become: yes
+
+    - name: mysql install and dependencies
+      package:
+        name: "{{item}}"
+        state: present
+        update_cache: yes
+      loop:
+        - mysql-server
+        - mysql-client
+        - python3-mysqldb
+        - libmysqlclient-dev
+      become: yes
+
+    - name: start mysql
+      service:
+        name: mysql
+        state: started
+        enabled: yes
+      become: yes
+
+    - name: create mysql credential
+      mysql_user:
+        name: Examproject
+        password: altschool
+        priv: '*.*:ALL'
+        host: '%'
+        state: present
+      become: yes
+
+    - name: create Examproject db
+      mysql_db:
+        name: Examproject
+        state: present
+      become: yes
+
+    - name: allow login to mysql
+      lineinfile:
+         path: /etc/mysql/mysql.conf.d/mysqld.cnf
+         regexp: '^bind-address'
+         line: 'bind-address = 0.0.0.0'
+         backup: yes
+      become: yes
+
+    - name: Clone laravel project repo
+      git:
+        dest: /var/www/Schoolproject/laravel
+        repo: https://github.com/f1amy/laravel-realworld-example-app.git
+        update: no
+        clone: yes
+      become: yes
+   
+    - name: creating .env File
+      script: /home/ubuntu/examproject/scripts/scriptdeb.sh
+      become: yes
+
+    - name: Downloading and installing Composer
+      shell: curl -sS https://getcomposer.org/installer | php
+      args:
+        chdir: /usr/src/
+        creates: /usr/bin/composer
+        warn: false
+      become: yes
+
+    - name: Add Composer to global path
+      copy:
+        src: /usr/src/composer.phar
+        dest: /usr/bin/composer
+        group: root
+        mode: '0755'
+        owner: root
+        remote_src: yes
+      become: yes
+
+    - name: Installing composer deps
+      shell: |
+        cd /var/www/Schoolproject/laravel
+        composer install
+
+    - name: database migration
+      shell: |
+        cd /var/www/Schoolproject/laravel
+
+        php artisan key:generate
+
+        php artisan config:cache
+
+        php artisan migrate:fresh
+
+        php artisan migrate --seed
+      become: yes
+    
+    - name: configuring .conf file
+      script: /home/ubuntu/examproject/scripts/script2.sh
+      become: yes
+
+
+
